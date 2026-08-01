@@ -18,7 +18,17 @@
 
 **ClipCycle** is a specialized desktop clipboard manager built for a university **Data Structures and Algorithms (PDSA)** coursework project.
 
-It organizes related text items into an ordered sequence called a **Copy List**. Users can step forward and backward through the sequence, automatically syncing the active item to the system clipboard, inserting new items anywhere in the sequence, or deleting unwanted items seamlessly.
+Unlike passive, unordered clipboard managers (such as Windows Clipboard History or Ditto), **ClipCycle** guides users through ordered, directed copy-paste tasks. It organizes text items into a sequential **Copy List**, allowing users to step forward and backward, auto-advance through tasks, track completion progress, and persist sequences to disk.
+
+---
+
+## ✨ Key Differentiators & New Features
+
+Compared to passive market tools, ClipCycle emphasizes **guided task completion**:
+
+- **📊 Real-Time Progress Tracking**: Each node tracks an internal `used` flag set to `true` upon copying. Completed frames visually dim with an amber checkmark glyph (`✓`), and a real-time progress indicator (`3 of 7 copied`) updates live in the header.
+- **↻ Guided Auto-Advance**: Enabling the `↻ Auto-advance` toggle automatically advances the `current` pointer to the next un-copied item in sequence upon copying, smoothly auto-centering the filmstrip on the next task.
+- **💾 Plain Text & macOS RTF Persistence**: Save and load Copy Lists to/from plain text (`.txt`) and macOS Rich Text Format (`.rtf`) files without external libraries. Loading reconstructs the doubly linked list node by node in exact file order with fresh, un-copied states.
 
 ---
 
@@ -29,6 +39,7 @@ Rather than generic administrative dashboards, **ClipCycle** adopts a physical *
 - **Filmstrip Reel (`#14171C`)**: Dark background representing a physical film reel container.
 - **Frames (`#262B33`)**: Each clipboard item sits in a distinct frame complete with sprocket hole perforations.
 - **Active Frame Glow (`#E8A33D`)**: The active node lights up in warm amber, while inactive frames remain dimmed.
+- **Used Frame Dimming**: Completed frames dim to `#1E2229` with an amber checkmark (`✓`) overlay in the top-right corner. Active state always takes priority.
 - **Projector Advances**: Navigating Next/Previous slides the sequence smoothly into view.
 
 ### 🎨 Color Palette
@@ -37,10 +48,10 @@ Rather than generic administrative dashboards, **ClipCycle** adopts a physical *
 | :---: | :--- | :--- | :--- |
 | ⬛ | `--bg-base` | `#14171C` | Deep reel background |
 | 🔲 | `--frame-idle` | `#262B33` | Inactive item frame |
-| 🟧 | `--frame-active-glow` | `#E8A33D` | Active item highlight |
+| 🟧 | `--frame-active-glow` | `#E8A33D` | Active item highlight & checkmarks |
 | 🩶 | `--slate` | `#4A5568` | Borders & secondary controls |
 | ⚪ | `--text-primary` | `#EDEDE3` | Primary item content |
-| 🔘 | `--text-muted` | `--8A8F98` | Sequence index & captions |
+| 🔘 | `--text-muted` | `#8A8F98` | Sequence index & completed frame content |
 
 ---
 
@@ -65,20 +76,29 @@ NULL ◄┤ Node 1  ├─────►│ Node 2  ├─────►│ No
 
 ### Core Operations & Oral Exam Guide
 
-| Operation | Description | Time Complexity | Pointer Adjustments |
+| Operation | Description | Time Complexity | Pointer & State Adjustments |
 | :--- | :--- | :---: | :--- |
 | `addItem(text)` | Appends node to the tail of the list | $\mathcal{O}(1)$ | Updates `tail.next` & new node `prev`, advances `tail` |
 | `insertAfterCurrent(text)` | Inserts node immediately after active item | $\mathcal{O}(1)$ | Re-links 4 pointers (`current`, `newNode`, `successor`) |
 | `deleteItem()` | Removes active node and reconnects neighbors | $\mathcal{O}(1)$ | Updates `prev.next` & `next.prev`, advances `current` |
 | `next()` / `previous()` | Moves active frame forward or backward | $\mathcal{O}(1)$ | Shifts `current = current.next` or `current.prev` |
-| `copyCurrent()` | Copies active node text to OS system clipboard | $\mathcal{O}(1)$ | Reads `current.content` and writes to OS clipboard |
+| `copyCurrent()` | Copies active node text to OS system clipboard | $\mathcal{O}(1)$ / $\mathcal{O}(n)$ | Writes to OS clipboard, sets `used = true`; if `autoAdvance` is enabled, calls `findNextUnused()` |
+| `findNextUnused()` | Scans forward from `current.next` for first un-copied node | $\mathcal{O}(n)$ | Read-only forward traversal; returns next unused node or `null` |
+| `getUsedCount()` / `getProgress()` | Counts copied nodes & formats progress string | $\mathcal{O}(n)$ | Traverses `head` to `tail` checking `isUsed()`; returns e.g. `"3 of 7 copied"` |
+| `saveToFile(file)` | Writes Copy List name and node text sequence to file | $\mathcal{O}(n)$ | Traverses `head` to `tail` writing UTF-8 lines |
+| `loadFromFile(file)` | Rebuilds DoublyLinkedList from plain text or `.rtf` file | $\mathcal{O}(n)$ | Parses line breaks, clears old list, appends nodes in order, resets `used = false`, sets `current = head` |
 | `start()` | Resets active pointer to the head of the list | $\mathcal{O}(1)$ | Sets `current = head` |
 
 ---
 
-## 💾 Save File Format
+## 💾 Save & Load File Format
 
-ClipCycle persists Copy Lists to plain text (`.txt`) files without third-party dependencies or external serialization libraries. The first line of the file contains the Copy List's display name. Each subsequent line represents a text item in exact sequence from head to tail. When loaded, the application reconstructs the doubly linked list node by node in file order and resets all items to an unused state (`used = false`).
+ClipCycle persists Copy Lists to plain text (`.txt`) and macOS Rich Text Format (`.rtf`) files without third-party dependencies or external serialization libraries. 
+
+- **Line 1**: Copy List Name.
+- **Lines 2..N**: Sequential text content for each frame (head to tail).
+- **macOS RTF Support**: Auto-detects and extracts text from `.rtf` documents created by macOS TextEdit using Java's built-in `RTFEditorKit`.
+- **State Reset**: Reconstructed lists reset all `used` flags to `false` and place `current` back at the head node for a fresh walkthrough.
 
 ---
 
