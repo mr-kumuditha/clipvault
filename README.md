@@ -76,6 +76,12 @@ NULL ◄┤ Node 1  ├─────►│ Node 2  ├─────►│ No
 
 ---
 
+## 💾 Save File Format
+
+ClipCycle persists Copy Lists to plain text (`.txt`) files without third-party dependencies or external serialization libraries. The first line of the file contains the Copy List's display name. Each subsequent line represents a text item in exact sequence from head to tail. When loaded, the application reconstructs the doubly linked list node by node in file order and resets all items to an unused state (`used = false`).
+
+---
+
 ## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
