@@ -107,12 +107,16 @@ clipvault/
     │   │   └── com/clipcycle/
     │   │       ├── App.java                 # Main JavaFX application entry point
     │   │       ├── model/                   # Hand-written DoublyLinkedList & ClipboardNode
-    │   │       └── controller/              # JavaFX UI Controller (MainController)
+    │   │       │   ├── ClipboardNode.java   # Core node class (content, prev, next, used flag)
+    │   │       │   └── CopyList.java        # Doubly linked list logic & persistence
+    │   │       └── controller/              # JavaFX UI Controller
+    │   │           └── MainController.java  # UI interaction handler & state synchronizer
     │   └── resources/
     │       └── com/clipcycle/styles/
     │           └── clipcycle.css            # Filmstrip design system stylesheet
     └── test/
-        └── java/com/clipcycle/model/        # JUnit 5 unit tests for data structure correctness (27 tests)
+        └── java/com/clipcycle/model/
+            └── CopyListTest.java            # JUnit 5 unit test suite (40 tests)
 ```
 
 ---
@@ -152,13 +156,13 @@ mvn test
 
 ## 🧪 Unit Testing
 
-The data structure logic is covered by 27 isolated **JUnit 5 unit tests** located in `src/test/java/com/clipcycle/model/CopyListTest.java`.
+The data structure logic is covered by 40 isolated **JUnit 5 unit tests** located in `src/test/java/com/clipcycle/model/CopyListTest.java`.
 
 ```bash
 mvn test
 ```
 
-All 27 test cases pass with 0 failures, validating edge cases such as empty-list handling, single-item deletion, head/tail deletion, and pointer integrity.
+All 40 test cases pass with 0 failures, validating edge cases such as progress tracking, auto-advance navigation, plain text & RTF file persistence, empty-list handling, single-item deletion, head/tail deletion, and pointer integrity.
 
 ---
 
