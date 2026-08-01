@@ -9,11 +9,15 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
+import java.io.File;
 import java.util.Optional;
 
 /**
@@ -27,6 +31,7 @@ public class MainController {
 
     private final CopyList list;
     private final Label positionLabel;
+    private final Label progressLabel;
     private final Label statusLabel;
     private final Label listNameLabel;
     private final HBox strip;
@@ -39,12 +44,16 @@ public class MainController {
     private final Button addBtn;
     private final Button insertBtn;
     private final Button deleteBtn;
+    private final Button saveBtn;
+    private final Button loadBtn;
+    private final ToggleButton autoAdvanceToggle;
 
     private PauseTransition statusTimer;
 
     public MainController(CopyList list,
                           Label listNameLabel,
                           Label positionLabel,
+                          Label progressLabel,
                           Label statusLabel,
                           HBox strip,
                           ScrollPane scrollPane,
@@ -54,10 +63,14 @@ public class MainController {
                           Button startBtn,
                           Button addBtn,
                           Button insertBtn,
-                          Button deleteBtn) {
+                          Button deleteBtn,
+                          Button saveBtn,
+                          Button loadBtn,
+                          ToggleButton autoAdvanceToggle) {
         this.list = list;
         this.listNameLabel = listNameLabel;
         this.positionLabel = positionLabel;
+        this.progressLabel = progressLabel;
         this.statusLabel = statusLabel;
         this.strip = strip;
         this.scrollPane = scrollPane;
@@ -68,6 +81,9 @@ public class MainController {
         this.addBtn = addBtn;
         this.insertBtn = insertBtn;
         this.deleteBtn = deleteBtn;
+        this.saveBtn = saveBtn;
+        this.loadBtn = loadBtn;
+        this.autoAdvanceToggle = autoAdvanceToggle;
 
         setupEventHandlers();
         refreshUI();
@@ -87,6 +103,12 @@ public class MainController {
         addBtn.setOnAction(e -> handleAddItem());
         insertBtn.setOnAction(e -> handleInsertAfter());
         deleteBtn.setOnAction(e -> handleDeleteItem());
+        saveBtn.setOnAction(e -> handleSaveList());
+        loadBtn.setOnAction(e -> handleLoadList());
+
+        // ── Toggle Controls ──────────────────────────────────────────
+        autoAdvanceToggle.setOnAction(e ->
+                list.setAutoAdvance(autoAdvanceToggle.isSelected()));
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -133,6 +155,7 @@ public class MainController {
         }
         boolean success = list.copyCurrent();
         if (success) {
+            refreshUI();  // update checkmarks, progress, and auto-advance position
             showTemporaryStatus("✓ Copied to clipboard!");
         } else {
             showTemporaryStatus("✗ Copy failed");
@@ -163,6 +186,52 @@ public class MainController {
         refreshUI();
         if (deletedText != null) {
             showTemporaryStatus("✓ Deleted active frame");
+        }
+    }
+
+    public void handleSaveList() {
+        if (list.isEmpty()) {
+            showTemporaryStatus("✗ List is empty");
+            return;
+        }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Copy List");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Text Files (*.txt)", "*.txt")
+        );
+        String safeName = list.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+        fileChooser.setInitialFileName(safeName + ".txt");
+
+        File file = fileChooser.showSaveDialog(scrollPane.getScene().getWindow());
+        if (file != null) {
+            try {
+                list.saveToFile(file);
+                showTemporaryStatus("✓ Saved: " + file.getName());
+            } catch (Exception ex) {
+                showTemporaryStatus("✗ Save failed");
+            }
+        }
+    }
+
+    public void handleLoadList() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Load Copy List");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Supported Files (*.txt, *.rtf, *.text, *.csv, *.log)", "*.txt", "*.rtf", "*.text", "*.csv", "*.log"),
+                new FileChooser.ExtensionFilter("Text Files (*.txt)", "*.txt"),
+                new FileChooser.ExtensionFilter("Rich Text Format (*.rtf)", "*.rtf"),
+                new FileChooser.ExtensionFilter("All Files", "*")
+        );
+
+        File file = fileChooser.showOpenDialog(scrollPane.getScene().getWindow());
+        if (file != null) {
+            try {
+                list.loadFromFile(file);
+                refreshUI();
+                showTemporaryStatus("✓ Loaded: " + file.getName());
+            } catch (Exception ex) {
+                showTemporaryStatus("✗ Load failed");
+            }
         }
     }
 
@@ -223,6 +292,7 @@ public class MainController {
         }
 
         positionLabel.setText(String.format("item %d of %d", list.getCurrentIndex(), list.getSize()));
+        progressLabel.setText("\u2713 " + list.getProgress());
 
         // Auto-center scroll active frame after layout pass
         if (activeCellNode != null) {
@@ -262,6 +332,9 @@ public class MainController {
         if (isActive) {
             cell.getStyleClass().add("frame-cell-active");
         }
+        if (targetNode.isUsed()) {
+            cell.getStyleClass().add("frame-cell-used");
+        }
 
         // Click on frame cell advances current pointer to this frame
         cell.setOnMouseClicked(e -> jumpToNode(targetNode));
@@ -279,12 +352,20 @@ public class MainController {
         HBox sprocketsTop = new HBox(holeTopL, indexLabel, holeTopR);
         sprocketsTop.getStyleClass().add("sprocket-row");
 
-        // ── Frame body ──
+        // ── Frame body (StackPane for checkmark overlay) ──
         Label contentLabel = new Label(content);
         contentLabel.getStyleClass().add("frame-content");
 
-        VBox body = new VBox(contentLabel);
+        StackPane body = new StackPane(contentLabel);
         body.getStyleClass().add("frame-body");
+
+        // Show checkmark on used (already-copied) frames
+        if (targetNode.isUsed()) {
+            Label checkmark = new Label("\u2713");
+            checkmark.getStyleClass().add("frame-checkmark");
+            StackPane.setAlignment(checkmark, Pos.TOP_RIGHT);
+            body.getChildren().add(checkmark);
+        }
 
         // ── Bottom sprocket row ──
         HBox sprocketsBottom = new HBox();
