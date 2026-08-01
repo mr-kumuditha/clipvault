@@ -1,4 +1,3 @@
-
 package com.clipcycle.controller;
 
 import com.clipcycle.model.ClipboardNode;
@@ -30,6 +29,7 @@ import java.util.Optional;
  */
 public class MainController {
 
+    // Model and injected UI component references (wired up by the FXML controller)
     private final CopyList list;
     private final Label positionLabel;
     private final Label progressLabel;
@@ -49,8 +49,13 @@ public class MainController {
     private final Button loadBtn;
     private final ToggleButton autoAdvanceToggle;
 
+    // Timer used to auto-clear the temporary status message
     private PauseTransition statusTimer;
 
+    /**
+     * Wires the given model and UI controls together, binds event handlers,
+     * and performs an initial render of the filmstrip.
+     */
     public MainController(CopyList list,
                           Label listNameLabel,
                           Label positionLabel,
@@ -94,28 +99,30 @@ public class MainController {
      * Binds user action handlers to button clicks.
      */
     private void setupEventHandlers() {
-        // ── Primary Controls ──────────────────────────────────────────
+        // Frame navigation and copy actions
         startBtn.setOnAction(e -> handleStart());
         prevBtn.setOnAction(e -> handlePrevious());
         copyBtn.setOnAction(e -> handleCopyCurrent());
         nextBtn.setOnAction(e -> handleNext());
 
-        // ── Secondary Controls ────────────────────────────────────────
+        // List editing actions
         addBtn.setOnAction(e -> handleAddItem());
         insertBtn.setOnAction(e -> handleInsertAfter());
         deleteBtn.setOnAction(e -> handleDeleteItem());
         saveBtn.setOnAction(e -> handleSaveList());
         loadBtn.setOnAction(e -> handleLoadList());
 
-        // ── Toggle Controls ──────────────────────────────────────────
+        // Toggle auto-advance behavior on the model
         autoAdvanceToggle.setOnAction(e ->
                 list.setAutoAdvance(autoAdvanceToggle.isSelected()));
     }
 
-    // ════════════════════════════════════════════════════════════════
-    //  Command Handlers
-    // ════════════════════════════════════════════════════════════════
+    // ---- Command Handlers ----
 
+    /**
+     * Prompts the user for new clipboard text and appends it as a new
+     * tail node via {@link CopyList#addItem(String)}.
+     */
     public void handleAddItem() {
         Optional<String> result = showInputDialog("Add New Item", "Enter clipboard text content:", "");
         if (result.isPresent()) {
@@ -130,6 +137,9 @@ public class MainController {
         }
     }
 
+    /**
+     * Moves the current pointer back to the head node of the list.
+     */
     public void handleStart() {
         if (list.isEmpty()) return;
         list.start();
@@ -137,18 +147,30 @@ public class MainController {
         showTemporaryStatus("⏮ Jumped to Start");
     }
 
+    /**
+     * Moves the current pointer one node backward using the active
+     * node's prev reference.
+     */
     public void handlePrevious() {
         if (list.isEmpty()) return;
         list.previous();
         refreshUI();
     }
 
+    /**
+     * Moves the current pointer one node forward using the active
+     * node's next reference.
+     */
     public void handleNext() {
         if (list.isEmpty()) return;
         list.next();
         refreshUI();
     }
 
+    /**
+     * Copies the content of the current node to the system clipboard
+     * and marks that node as used.
+     */
     public void handleCopyCurrent() {
         if (list.isEmpty()) {
             showTemporaryStatus("✗ Nothing to copy");
@@ -163,6 +185,11 @@ public class MainController {
         }
     }
 
+    /**
+     * Inserts a new node immediately after the current node. If the
+     * list is empty there is no "current" node to insert after, so
+     * this falls back to {@link #handleAddItem()}.
+     */
     public void handleInsertAfter() {
         if (list.isEmpty()) {
             handleAddItem();
@@ -181,6 +208,10 @@ public class MainController {
         }
     }
 
+    /**
+     * Removes the current node from the list. {@link CopyList#deleteItem()}
+     * is responsible for re-linking the neighboring prev/next nodes.
+     */
     public void handleDeleteItem() {
         if (list.isEmpty()) return;
         String deletedText = list.deleteItem();
@@ -190,6 +221,10 @@ public class MainController {
         }
     }
 
+    /**
+     * Opens a file chooser and writes the current list contents to a
+     * text file on disk.
+     */
     public void handleSaveList() {
         if (list.isEmpty()) {
             showTemporaryStatus("✗ List is empty");
@@ -214,6 +249,10 @@ public class MainController {
         }
     }
 
+    /**
+     * Opens a file chooser and loads list contents from a supported
+     * text-based file, replacing the current list.
+     */
     public void handleLoadList() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Load Copy List");
@@ -237,7 +276,9 @@ public class MainController {
     }
 
     /**
-     * Jump directly to a clicked node in the filmstrip.
+     * Jumps directly to a clicked node in the filmstrip. Since nodes are
+     * only reachable by walking next/prev links, this resets to the head
+     * and walks forward until the target node is reached (O(n) traversal).
      */
     private void jumpToNode(ClipboardNode targetNode) {
         if (targetNode == null || list.isEmpty()) return;
@@ -251,9 +292,7 @@ public class MainController {
         refreshUI();
     }
 
-    // ════════════════════════════════════════════════════════════════
-    //  UI Rendering & Sync
-    // ════════════════════════════════════════════════════════════════
+    // ---- UI Rendering & Sync ----
 
     /**
      * Re-renders the filmstrip items from head to tail using model pointers,
@@ -279,6 +318,8 @@ public class MainController {
         int index = 1;
         Node activeCellNode = null;
 
+        // Walk the doubly linked list head-to-tail via next references,
+        // building one filmstrip cell per node
         while (walker != null) {
             boolean isActive = (walker == activeNode);
             VBox cell = buildFrameCell(index, walker.getContent(), isActive, walker);
@@ -304,6 +345,10 @@ public class MainController {
         }
     }
 
+    /**
+     * Enables or disables navigation/editing buttons based on whether the
+     * list is empty and whether the current node has a prev/next neighbor.
+     */
     private void setControlsEnabled(boolean enabled) {
         if (!enabled || list.isEmpty()) {
             prevBtn.setDisable(true);
@@ -327,6 +372,11 @@ public class MainController {
         }
     }
 
+    /**
+     * Builds a single filmstrip "frame" cell representing one node in the
+     * copy list: index label, content text, and a checkmark overlay if the
+     * node has already been copied (used).
+     */
     private VBox buildFrameCell(int index, String content, boolean isActive, ClipboardNode targetNode) {
         VBox cell = new VBox();
         cell.getStyleClass().add("frame-cell");
@@ -340,7 +390,7 @@ public class MainController {
         // Click on frame cell advances current pointer to this frame
         cell.setOnMouseClicked(e -> jumpToNode(targetNode));
 
-        // ── Top sprocket row ──
+        // Top sprocket row: decorative holes flanking the frame index label
         Region holeTopL = new Region();
         holeTopL.getStyleClass().add("sprocket-hole");
 
@@ -353,7 +403,7 @@ public class MainController {
         HBox sprocketsTop = new HBox(holeTopL, indexLabel, holeTopR);
         sprocketsTop.getStyleClass().add("sprocket-row");
 
-        // ── Frame body (StackPane for checkmark overlay) ──
+        // Frame body: content label, with checkmark overlay stacked on top
         Label contentLabel = new Label(content);
         contentLabel.getStyleClass().add("frame-content");
 
@@ -368,7 +418,7 @@ public class MainController {
             body.getChildren().add(checkmark);
         }
 
-        // ── Bottom sprocket row ──
+        // Bottom sprocket row: purely decorative holes
         HBox sprocketsBottom = new HBox();
         sprocketsBottom.getStyleClass().add("sprocket-row");
         for (int i = 0; i < 3; i++) {
@@ -381,6 +431,10 @@ public class MainController {
         return cell;
     }
 
+    /**
+     * Computes and applies the horizontal scroll value needed to center
+     * the given node within the scroll pane's viewport.
+     */
     private void centerNodeInScrollPane(Node node) {
         double width = scrollPane.getContent().getBoundsInLocal().getWidth();
         double viewportWidth = scrollPane.getViewportBounds().getWidth();
@@ -398,6 +452,10 @@ public class MainController {
         scrollPane.setHvalue(Math.max(0, Math.min(1, hvalue)));
     }
 
+    /**
+     * Displays a status message for a short duration, then clears it.
+     * Restarts the timer if a message is already showing.
+     */
     private void showTemporaryStatus(String message) {
         if (statusTimer != null) {
             statusTimer.stop();
@@ -408,6 +466,10 @@ public class MainController {
         statusTimer.play();
     }
 
+    /**
+     * Shows a styled text input dialog, keeping the OK button disabled
+     * while the entered text is empty or whitespace-only.
+     */
     private Optional<String> showInputDialog(String title, String header, String defaultValue) {
         TextInputDialog dialog = new TextInputDialog(defaultValue);
         dialog.setTitle(title);
@@ -431,4 +493,3 @@ public class MainController {
         return dialog.showAndWait();
     }
 }
-
