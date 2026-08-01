@@ -27,11 +27,11 @@ public class App extends Application {
 
     /** Default sample items added on application launch. */
     private static final String[] SAMPLE_ITEMS = {
-        "Hello World",
-        "git push origin main",
-        "npm run build",
-        "docker compose up",
-        "ssh user@host"
+        "git pull origin main",
+        "mvn clean compile",
+        "mvn test",
+        "docker build -t clipcycle:v1.0 .",
+        "docker push registry.internal/clipcycle:v1.0"
     };
 
     private Label listNameLabel;
@@ -62,7 +62,7 @@ public class App extends Application {
         root.setBottom(buildControlBar());
 
         // Initialize CopyList model and add initial items
-        CopyList list = new CopyList("My Copy List");
+        CopyList list = new CopyList("Dev Deployment Workflow");
         for (String item : SAMPLE_ITEMS) {
             list.addItem(item);
         }
