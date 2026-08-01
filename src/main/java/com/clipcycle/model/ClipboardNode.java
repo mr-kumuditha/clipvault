@@ -16,6 +16,7 @@ public class ClipboardNode {
     private String content;
     private ClipboardNode prev;
     private ClipboardNode next;
+    private boolean used;
 
     /**
      * Creates a new, unlinked node with the given text content.
@@ -28,6 +29,7 @@ public class ClipboardNode {
         this.content = content;
         this.prev = null;
         this.next = null;
+        this.used = false;
     }
 
     // ── Content accessors ───────────────────────────────────────────
@@ -38,6 +40,17 @@ public class ClipboardNode {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    // ── Used-flag accessors (progress tracking) ─────────────────────
+
+    /** True if this node's text has been copied to the OS clipboard. */
+    public boolean isUsed() {
+        return used;
+    }
+
+    public void setUsed(boolean used) {
+        this.used = used;
     }
 
     // ── Pointer accessors ───────────────────────────────────────────
