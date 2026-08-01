@@ -16,24 +16,30 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.util.prefs.Preferences;
+
 /**
  * Application entry point — bootstraps the filmstrip UI shell and wires it to
  * the {@link CopyList} doubly-linked list model via {@link MainController}.
  */
 public class App extends Application {
 
-    private static final double WINDOW_WIDTH  = 960;
-    private static final double WINDOW_HEIGHT = 540;
+    private static final double WINDOW_WIDTH = 960;
+    private static final double WINDOW_HEIGHT = 580;
+
+    private static final Preferences prefs = Preferences.userNodeForPackage(App.class);
+    private static final String PREF_THEME = "theme_mode";
 
     /** Default sample items added on application launch. */
     private static final String[] SAMPLE_ITEMS = {
-        "git pull origin main",
-        "mvn clean compile",
-        "mvn test",
-        "docker build -t clipcycle:v1.0 .",
-        "docker push registry.internal/clipcycle:v1.0"
+            "Hello World",
+            "Java",
+            "NIBM",
+            "Kumuditha",
+            "Data Structures and Algorithms"
     };
 
+    private BorderPane rootPane;
     private Label listNameLabel;
     private Label positionLabel;
     private Label progressLabel;
@@ -54,12 +60,20 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) {
-        BorderPane root = new BorderPane();
-        root.getStyleClass().add("root-pane");
+        rootPane = new BorderPane();
+        rootPane.getStyleClass().add("root-pane");
 
-        root.setTop(buildHeader());
-        root.setCenter(buildFilmstrip());
-        root.setBottom(buildControlBar());
+        // Apply saved theme preference (default to dark)
+        String currentTheme = prefs.get(PREF_THEME, "dark");
+        if ("light".equalsIgnoreCase(currentTheme)) {
+            rootPane.getStyleClass().add("theme-light");
+        } else {
+            rootPane.getStyleClass().add("theme-dark");
+        }
+
+        rootPane.setTop(buildHeader());
+        rootPane.setCenter(buildFilmstrip());
+        rootPane.setBottom(buildControlBar());
 
         // Initialize CopyList model and add initial items
         CopyList list = new CopyList("Dev Deployment Workflow");
@@ -70,28 +84,27 @@ public class App extends Application {
         list.start();
 
         MainController controller = new MainController(list,
-                                                   listNameLabel,
-                                                   positionLabel,
-                                                   progressLabel,
-                                                   statusLabel,
-                                                   strip,
-                                                   scrollPane,
-                                                   prevBtn,
-                                                   copyBtn,
-                                                   nextBtn,
-                                                   startBtn,
-                                                   addBtn,
-                                                   insertBtn,
-                                                   deleteBtn,
-                                                   saveBtn,
-                                                   loadBtn,
-                                                   autoAdvanceToggle);
+                listNameLabel,
+                positionLabel,
+                progressLabel,
+                statusLabel,
+                strip,
+                scrollPane,
+                prevBtn,
+                copyBtn,
+                nextBtn,
+                startBtn,
+                addBtn,
+                insertBtn,
+                deleteBtn,
+                saveBtn,
+                loadBtn,
+                autoAdvanceToggle);
 
-        Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
+        Scene scene = new Scene(rootPane, WINDOW_WIDTH, WINDOW_HEIGHT);
         scene.getStylesheets().add(
-            getClass().getResource("/com/clipcycle/styles/clipcycle.css")
-                      .toExternalForm()
-        );
+                getClass().getResource("/com/clipcycle/styles/clipcycle.css")
+                        .toExternalForm());
 
         // Keyboard navigation shortcuts
         scene.setOnKeyPressed(event -> {
@@ -103,7 +116,8 @@ public class App extends Application {
                         controller.handleAddItem();
                     }
                 }
-                default -> {}
+                default -> {
+                }
             }
         });
 
@@ -115,7 +129,7 @@ public class App extends Application {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Header — title + list name on the left, position on the right
+    // Header — title + list name on the left, theme toggle & stats on the right
     // ════════════════════════════════════════════════════════════════
 
     private HBox buildHeader() {
@@ -126,7 +140,7 @@ public class App extends Application {
         listNameLabel.getStyleClass().add("list-name-label");
         listNameLabel.setId("list-name-label");
 
-        VBox left = new VBox(2, title, listNameLabel);
+        VBox left = new VBox(4, title, listNameLabel);
         left.setAlignment(Pos.CENTER_LEFT);
 
         positionLabel = new Label("frame 1 of 1");
@@ -141,7 +155,35 @@ public class App extends Application {
         statusLabel.getStyleClass().add("status-label");
         statusLabel.setId("status-label");
 
-        VBox right = new VBox(2, positionLabel, progressLabel, statusLabel);
+        VBox statsBox = new VBox(4, positionLabel, progressLabel, statusLabel);
+        statsBox.setAlignment(Pos.CENTER_RIGHT);
+
+        boolean isLight = "light".equalsIgnoreCase(prefs.get(PREF_THEME, "dark"));
+        ToggleButton themeToggle = new ToggleButton(isLight ? "☀️ Light" : "🌙 Dark");
+        themeToggle.getStyleClass().add("theme-toggle-btn");
+        themeToggle.setId("theme-toggle-btn");
+        themeToggle.setSelected(isLight);
+
+        themeToggle.setOnAction(e -> {
+            boolean lightMode = themeToggle.isSelected();
+            if (lightMode) {
+                rootPane.getStyleClass().remove("theme-dark");
+                if (!rootPane.getStyleClass().contains("theme-light")) {
+                    rootPane.getStyleClass().add("theme-light");
+                }
+                themeToggle.setText("☀️ Light");
+                prefs.put(PREF_THEME, "light");
+            } else {
+                rootPane.getStyleClass().remove("theme-light");
+                if (!rootPane.getStyleClass().contains("theme-dark")) {
+                    rootPane.getStyleClass().add("theme-dark");
+                }
+                themeToggle.setText("🌙 Dark");
+                prefs.put(PREF_THEME, "dark");
+            }
+        });
+
+        HBox right = new HBox(16, themeToggle, statsBox);
         right.setAlignment(Pos.CENTER_RIGHT);
 
         Region spacer = new Region();
@@ -153,7 +195,7 @@ public class App extends Application {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Filmstrip — horizontal scrollable strip container
+    // Filmstrip — horizontal scrollable strip container
     // ════════════════════════════════════════════════════════════════
 
     private ScrollPane buildFilmstrip() {
@@ -171,7 +213,7 @@ public class App extends Application {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Control bar — primary (nav/copy) + secondary (list editing)
+    // Control bar — primary (nav/copy) + secondary (list editing)
     // ════════════════════════════════════════════════════════════════
 
     private VBox buildControlBar() {
@@ -230,7 +272,7 @@ public class App extends Application {
         HBox toggleRow = new HBox(toggleSpacer, autoAdvanceToggle);
         toggleRow.getStyleClass().add("toggle-row");
 
-        VBox bar = new VBox(primaryRow, secondaryRow, toggleRow);
+        VBox bar = new VBox(16, primaryRow, secondaryRow, toggleRow);
         bar.getStyleClass().add("control-bar");
         return bar;
     }
