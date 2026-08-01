@@ -5,6 +5,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.io.IOException;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -459,6 +462,243 @@ class CopyListTest {
         }
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    //  Progress Tracking
+    // ────────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Progress Tracking")
+    class ProgressTracking {
+
+        @Test
+        @DisplayName("node used flag defaults to false")
+        void usedDefaultsFalse() {
+            list.addItem("A");
+            assertFalse(list.getHead().isUsed());
+        }
+
+        @Test
+        @DisplayName("copyCurrent sets the used flag on the active node")
+        void copyCurrent_setsUsedFlag() {
+            list.addItem("A");
+            list.addItem("B");
+            list.start();
+
+            assertFalse(list.getCurrent().isUsed());
+            list.copyCurrent();
+            assertTrue(list.getCurrent().isUsed(),
+                    "current node should be marked as used after copyCurrent()");
+
+            // B should still be unused
+            list.next();
+            assertFalse(list.getCurrent().isUsed(),
+                    "non-copied node should remain unused");
+        }
+
+        @Test
+        @DisplayName("getUsedCount returns correct count after partial copies")
+        void getUsedCount_partialCopies() {
+            list.addItem("A");
+            list.addItem("B");
+            list.addItem("C");
+            list.start();
+
+            assertEquals(0, list.getUsedCount());
+
+            list.copyCurrent(); // copy A
+            assertEquals(1, list.getUsedCount());
+
+            list.next();
+            list.copyCurrent(); // copy B
+            assertEquals(2, list.getUsedCount());
+
+            // C is unused, total is 3
+            assertEquals(3, list.getSize());
+        }
+
+        @Test
+        @DisplayName("getProgress returns human-readable string")
+        void getProgress_returnsString() {
+            list.addItem("A");
+            list.addItem("B");
+            list.addItem("C");
+            list.start();
+
+            assertEquals("0 of 3 copied", list.getProgress());
+
+            list.copyCurrent();
+            assertEquals("1 of 3 copied", list.getProgress());
+
+            list.next();
+            list.next();
+            list.copyCurrent();
+            assertEquals("2 of 3 copied", list.getProgress());
+        }
+
+        @Test
+        @DisplayName("copying same node twice does not double-count")
+        void copySameNodeTwice_noDoubleCount() {
+            list.addItem("A");
+            list.start();
+
+            list.copyCurrent();
+            list.copyCurrent(); // copy same node again
+
+            assertEquals(1, list.getUsedCount());
+            assertEquals("1 of 1 copied", list.getProgress());
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Auto-Advance
+    // ────────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Auto-Advance")
+    class AutoAdvance {
+
+        @Test
+        @DisplayName("autoAdvance is off by default")
+        void offByDefault() {
+            assertFalse(list.isAutoAdvance());
+        }
+
+        @Test
+        @DisplayName("copyCurrent when autoAdvance is off does not change current pointer")
+        void autoAdvanceOff_currentStaysPut() {
+            list.addItem("A");
+            list.addItem("B");
+            list.start(); // current = A
+
+            list.copyCurrent();
+            assertEquals("A", list.getCurrentContent());
+        }
+
+        @Test
+        @DisplayName("copyCurrent when autoAdvance is on moves current to next unused node")
+        void autoAdvanceOn_advancesToNextUnused() {
+            list.addItem("A");
+            list.addItem("B");
+            list.addItem("C");
+            list.setAutoAdvance(true);
+            list.start(); // current = A
+
+            list.copyCurrent(); // copies A, auto-advances to B
+            assertEquals("B", list.getCurrentContent());
+
+            list.copyCurrent(); // copies B, auto-advances to C
+            assertEquals("C", list.getCurrentContent());
+        }
+
+        @Test
+        @DisplayName("findNextUnused skips already used nodes ahead")
+        void findNextUnused_skipsUsedNodes() {
+            list.addItem("A");
+            list.addItem("B");
+            list.addItem("C");
+            list.start(); // current = A
+
+            // Mark B as used manually
+            list.getHead().getNext().setUsed(true);
+
+            ClipboardNode nextUnused = list.findNextUnused();
+            assertNotNull(nextUnused);
+            assertEquals("C", nextUnused.getContent());
+        }
+
+        @Test
+        @DisplayName("copyCurrent when all remaining items are used leaves current unchanged without error")
+        void allRemainingUsed_leavesCurrentInPlace() {
+            list.addItem("A");
+            list.addItem("B");
+            list.setAutoAdvance(true);
+            list.start();
+
+            // Mark B as used
+            list.getTail().setUsed(true);
+
+            list.copyCurrent(); // copies A, finds no unused nodes ahead
+            assertEquals("A", list.getCurrentContent());
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Save and Load
+    // ────────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Save and Load")
+    class SaveAndLoad {
+
+        @Test
+        @DisplayName("saveToFile and loadFromFile persist items in order and reset used flags")
+        void saveAndLoad_persistsOrderAndResetsUsed() throws IOException {
+            list.setName("Project Tasks");
+            list.addItem("Task 1");
+            list.addItem("Task 2");
+            list.addItem("Task 3");
+            list.start();
+
+            // Copy Task 1 so it becomes used
+            list.copyCurrent();
+            assertTrue(list.getHead().isUsed());
+
+            File tempFile = File.createTempFile("clipcycle_test", ".txt");
+            tempFile.deleteOnExit();
+
+            // Save list to temp file
+            list.saveToFile(tempFile);
+            assertTrue(tempFile.length() > 0, "Saved file should not be empty");
+
+            // Load into a new CopyList instance
+            CopyList newList = new CopyList("Empty");
+            newList.loadFromFile(tempFile);
+
+            assertEquals("Project Tasks", newList.getName());
+            assertEquals(3, newList.getSize());
+
+            // Check item content and order
+            ClipboardNode n = newList.getHead();
+            assertEquals("Task 1", n.getContent());
+            assertFalse(n.isUsed(), "Loaded items must reset used flag to false");
+
+            n = n.getNext();
+            assertEquals("Task 2", n.getContent());
+            assertFalse(n.isUsed());
+
+            n = n.getNext();
+            assertEquals("Task 3", n.getContent());
+            assertFalse(n.isUsed());
+
+            assertNull(n.getNext());
+
+            // Check current pointer is reset to head
+            assertEquals("Task 1", newList.getCurrentContent());
+        }
+
+        @Test
+        @DisplayName("loadFromFile parses .rtf files created by macOS TextEdit")
+        void rtfFile_loadsPlainText() throws IOException {
+            File tempRtf = File.createTempFile("clipcycle_mac", ".rtf");
+            tempRtf.deleteOnExit();
+
+            String rtfContent = "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\n" +
+                                "\\f0\\fs24 Mac List Title\\par\n" +
+                                "First Item\\par\n" +
+                                "Second Item\\par\n" +
+                                "}";
+            java.nio.file.Files.writeString(tempRtf.toPath(), rtfContent);
+
+            CopyList rtfList = new CopyList("Untitled");
+            rtfList.loadFromFile(tempRtf);
+
+            assertEquals("Mac List Title", rtfList.getName());
+            assertEquals(2, rtfList.getSize());
+            assertEquals("First Item", rtfList.getHead().getContent());
+            assertEquals("Second Item", rtfList.getTail().getContent());
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────
     //  ClipboardNode direct tests
     // ────────────────────────────────────────────────────────────────
@@ -474,6 +714,13 @@ class CopyListTest {
             assertEquals("test", node.getContent());
             assertNull(node.getPrev());
             assertNull(node.getNext());
+        }
+
+        @Test
+        @DisplayName("new node has used == false")
+        void newNode_unusedByDefault() {
+            ClipboardNode node = new ClipboardNode("test");
+            assertFalse(node.isUsed());
         }
 
         @Test
