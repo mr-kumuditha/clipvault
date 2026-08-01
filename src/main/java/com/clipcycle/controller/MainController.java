@@ -2,7 +2,14 @@ package com.clipcycle.controller;
 
 import com.clipcycle.model.ClipboardNode;
 import com.clipcycle.model.CopyList;
+import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.PauseTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
+import javafx.beans.property.DoubleProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -180,6 +187,15 @@ public class MainController {
         if (success) {
             refreshUI();  // update checkmarks, progress, and auto-advance position
             showTemporaryStatus("✓ Copied to clipboard!");
+
+            // Subtle scale pulse on the Copy button — confirms the action visually
+            ScaleTransition pulse = new ScaleTransition(Duration.millis(200), copyBtn);
+            pulse.setFromX(0.93);
+            pulse.setFromY(0.93);
+            pulse.setToX(1.0);
+            pulse.setToY(1.0);
+            pulse.setInterpolator(Interpolator.EASE_OUT);
+            pulse.play();
         } else {
             showTemporaryStatus("✗ Copy failed");
         }
@@ -410,6 +426,28 @@ public class MainController {
         StackPane body = new StackPane(contentLabel);
         body.getStyleClass().add("frame-body");
 
+        // Active frame entrance: fade in + scale up for a tangible pop-in
+        if (isActive) {
+            body.setOpacity(0.0);
+            body.setScaleX(0.95);
+            body.setScaleY(0.95);
+
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(180), body);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+            fadeIn.setInterpolator(Interpolator.EASE_OUT);
+
+            ScaleTransition scaleIn = new ScaleTransition(Duration.millis(220), body);
+            scaleIn.setFromX(0.95);
+            scaleIn.setFromY(0.95);
+            scaleIn.setToX(1.0);
+            scaleIn.setToY(1.0);
+            scaleIn.setInterpolator(Interpolator.EASE_OUT);
+
+            fadeIn.play();
+            scaleIn.play();
+        }
+
         // Show checkmark on used (already-copied) frames
         if (targetNode.isUsed()) {
             Label checkmark = new Label("\u2713");
@@ -432,25 +470,39 @@ public class MainController {
     }
 
     /**
-     * Computes and applies the horizontal scroll value needed to center
-     * the given node within the scroll pane's viewport.
+     * Computes and smoothly animates the horizontal scroll value needed to
+     * center the given node within the scroll pane's viewport.
+     * Uses a 225ms ease-out slide — restrained, not bouncy.
      */
     private void centerNodeInScrollPane(Node node) {
         double width = scrollPane.getContent().getBoundsInLocal().getWidth();
         double viewportWidth = scrollPane.getViewportBounds().getWidth();
 
+        double targetH;
         if (width <= viewportWidth) {
-            scrollPane.setHvalue(0.5);
-            return;
+            targetH = 0.5;
+        } else {
+            double nodeMinX = node.getBoundsInParent().getMinX();
+            double nodeWidth = node.getBoundsInParent().getWidth();
+            double nodeCenter = nodeMinX + (nodeWidth / 2.0);
+            targetH = (nodeCenter - (viewportWidth / 2.0)) / (width - viewportWidth);
+            targetH = Math.max(0, Math.min(1, targetH));
         }
 
-        double nodeMinX = node.getBoundsInParent().getMinX();
-        double nodeWidth = node.getBoundsInParent().getWidth();
-        double nodeCenter = nodeMinX + (nodeWidth / 2.0);
-
-        double hvalue = (nodeCenter - (viewportWidth / 2.0)) / (width - viewportWidth);
-        scrollPane.setHvalue(Math.max(0, Math.min(1, hvalue)));
+        // Smooth 225ms ease-out slide instead of instant snap
+        if (scrollTimeline != null) {
+            scrollTimeline.stop();
+        }
+        scrollTimeline = new Timeline(
+            new KeyFrame(Duration.millis(225),
+                new KeyValue(scrollPane.hvalueProperty(), targetH, Interpolator.EASE_OUT)
+            )
+        );
+        scrollTimeline.play();
     }
+
+    /** Reusable timeline reference for scroll centering animation. */
+    private Timeline scrollTimeline;
 
     /**
      * Displays a status message for a short duration, then clears it.
