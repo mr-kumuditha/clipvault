@@ -2,6 +2,12 @@ package com.clipcycle.model;
 
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.List;
 
 /**
  * A hand-written Doubly Linked List that manages an ordered sequence
@@ -20,11 +26,12 @@ import java.awt.datatransfer.StringSelection;
  */
 public class CopyList {
 
-    private final String name;
+    private String name;
     private ClipboardNode head;
     private ClipboardNode tail;
     private ClipboardNode current;
     private int size;
+    private boolean autoAdvance;
 
     /**
      * Creates an empty Copy List with the given name.
@@ -36,6 +43,7 @@ public class CopyList {
         this.tail = null;
         this.current = null;
         this.size = 0;
+        this.autoAdvance = false;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -304,8 +312,9 @@ public class CopyList {
      * clipboard using java.awt, which writes to the same OS clipboard
      * that JavaFX (and every other application) reads from.
      *
-     * <p><b>Pointer change:</b> none — this is a read-only operation
-     * on the list structure.  Only the OS clipboard state changes.
+     * <p><b>Pointer change:</b> marks current node as used.  If
+     * {@code autoAdvance} is true, also moves current to the next
+     * unused node (via {@link #findNextUnused()}).
      *
      * @return {@code true} if text was successfully written to the
      *         clipboard; {@code false} if the list is empty
@@ -323,6 +332,17 @@ public class CopyList {
         Toolkit.getDefaultToolkit()
                .getSystemClipboard()
                .setContents(selection, null);
+        current.setUsed(true);  // mark this frame as "completed"
+
+        // Auto-advance: skip to the next unused node if enabled.
+        // If no unused node remains ahead, current stays put.
+        if (autoAdvance) {
+            ClipboardNode nextUnused = findNextUnused();
+            if (nextUnused != null) {
+                current = nextUnused;
+            }
+        }
+
         return true;
     }
 
@@ -333,6 +353,10 @@ public class CopyList {
     /** The user-given name for this Copy List. */
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     /** First node, or null if empty. */
@@ -365,6 +389,76 @@ public class CopyList {
         return size == 0;
     }
 
+    // ── Auto-advance setting ────────────────────────────────────────
+
+    /** True if copyCurrent() should automatically advance to the next unused node. */
+    public boolean isAutoAdvance() {
+        return autoAdvance;
+    }
+
+    public void setAutoAdvance(boolean autoAdvance) {
+        this.autoAdvance = autoAdvance;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  findNextUnused — locate the next un-copied node ahead
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * Walks forward from {@code current.next} and returns the first
+     * node whose {@code used} flag is false, or null if every
+     * remaining node ahead has already been copied.
+     *
+     * <p><b>Pointer change:</b> none — this is a read-only scan.
+     * The caller decides whether to move {@code current}.
+     *
+     * @return the next unused node ahead of current, or null
+     */
+    public ClipboardNode findNextUnused() {
+        if (current == null) {
+            return null;
+        }
+        ClipboardNode walker = current.getNext();
+        while (walker != null) {
+            if (!walker.isUsed()) {
+                return walker;  // found an unused frame
+            }
+            walker = walker.getNext();
+        }
+        return null;  // everything ahead is already used
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Progress tracking — how many nodes have been copied
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * Counts how many nodes in the list have their {@code used} flag
+     * set to true.  Walks head→tail, O(n).
+     *
+     * @return the number of nodes that have been copied at least once
+     */
+    public int getUsedCount() {
+        int count = 0;
+        ClipboardNode walker = head;
+        while (walker != null) {
+            if (walker.isUsed()) {
+                count++;
+            }
+            walker = walker.getNext();
+        }
+        return count;
+    }
+
+    /**
+     * Returns a human-readable progress string, e.g. "3 of 7 copied".
+     *
+     * @return progress string showing used count vs total size
+     */
+    public String getProgress() {
+        return getUsedCount() + " of " + size + " copied";
+    }
+
     /**
      * Returns the 1-based position of current by walking from head.
      * Returns 0 if the list is empty.
@@ -384,6 +478,110 @@ public class CopyList {
             index++;
         }
         return index;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Persistence — Save & Load plain text files
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * Saves this Copy List to a plain text file.
+     * Line 1: Copy List Name
+     * Lines 2..N: Node text contents in sequence (head -> tail)
+     *
+     * @param file target File to write
+     * @throws IOException if a file write error occurs
+     */
+    public void saveToFile(File file) throws IOException {
+        try (PrintWriter writer = new PrintWriter(file, StandardCharsets.UTF_8)) {
+            writer.println(name);
+            ClipboardNode walker = head;
+            while (walker != null) {
+                writer.println(walker.getContent());
+                walker = walker.getNext();
+            }
+        }
+    }
+
+    /**
+     * Replaces the contents of this Copy List by reading a plain text or RTF file.
+     * Handles macOS RTF (.rtf), line endings (\r, \n, \r\n), UTF-8 BOM, and character encoding.
+     * Line 1 becomes the list name.
+     * Subsequent lines become items added sequentially.
+     * All items start fresh with used = false.
+     * Sets current pointer to head via start().
+     *
+     * @param file source File to read
+     * @throws IOException if a file read error occurs
+     */
+    public void loadFromFile(File file) throws IOException {
+        String content = null;
+
+        // Try RTF parsing if file ends with .rtf
+        if (file.getName().toLowerCase().endsWith(".rtf")) {
+            try {
+                javax.swing.text.rtf.RTFEditorKit rtf = new javax.swing.text.rtf.RTFEditorKit();
+                javax.swing.text.Document doc = rtf.createDefaultDocument();
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                    rtf.read(fis, doc, 0);
+                    content = doc.getText(0, doc.getLength());
+                }
+            } catch (Exception ignored) {
+                // Fall back to plain text read below if RTF parse fails
+            }
+        }
+
+        if (content == null) {
+            try {
+                content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                content = Files.readString(file.toPath(), StandardCharsets.ISO_8859_1);
+            }
+        }
+
+        // If raw text starts with RTF signature, parse via RTFEditorKit
+        if (content.startsWith("{\\rtf")) {
+            try {
+                javax.swing.text.rtf.RTFEditorKit rtf = new javax.swing.text.rtf.RTFEditorKit();
+                javax.swing.text.Document doc = rtf.createDefaultDocument();
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                    rtf.read(fis, doc, 0);
+                    content = doc.getText(0, doc.getLength());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Strip UTF-8 Byte Order Mark (BOM) common on macOS / Windows text editors
+        if (content.startsWith("\uFEFF")) {
+            content = content.substring(1);
+        }
+
+        // Split by all OS line endings (\r\n, \n, \r)
+        String[] lines = content.split("\\r?\\n|\\r");
+
+        this.head = null;
+        this.tail = null;
+        this.current = null;
+        this.size = 0;
+
+        if (lines.length == 0 || (lines.length == 1 && lines[0].trim().isEmpty())) {
+            this.name = "Untitled List";
+            return;
+        }
+
+        String firstLine = lines[0].trim();
+        this.name = firstLine.isEmpty() ? "Loaded List" : firstLine;
+
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            // Ignore single trailing empty line produced by text editors ending with newline
+            if (i == lines.length - 1 && line.isEmpty()) {
+                continue;
+            }
+            addItem(line);
+        }
+        start();
     }
 }
 
