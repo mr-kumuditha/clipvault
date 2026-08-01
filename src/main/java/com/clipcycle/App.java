@@ -8,6 +8,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -35,6 +36,7 @@ public class App extends Application {
 
     private Label listNameLabel;
     private Label positionLabel;
+    private Label progressLabel;
     private Label statusLabel;
     private HBox strip;
     private ScrollPane scrollPane;
@@ -46,6 +48,9 @@ public class App extends Application {
     private Button addBtn;
     private Button insertBtn;
     private Button deleteBtn;
+    private Button saveBtn;
+    private Button loadBtn;
+    private ToggleButton autoAdvanceToggle;
 
     @Override
     public void start(Stage stage) {
@@ -67,6 +72,7 @@ public class App extends Application {
         MainController controller = new MainController(list,
                                                    listNameLabel,
                                                    positionLabel,
+                                                   progressLabel,
                                                    statusLabel,
                                                    strip,
                                                    scrollPane,
@@ -76,7 +82,10 @@ public class App extends Application {
                                                    startBtn,
                                                    addBtn,
                                                    insertBtn,
-                                                   deleteBtn);
+                                                   deleteBtn,
+                                                   saveBtn,
+                                                   loadBtn,
+                                                   autoAdvanceToggle);
 
         Scene scene = new Scene(root, WINDOW_WIDTH, WINDOW_HEIGHT);
         scene.getStylesheets().add(
@@ -124,11 +133,15 @@ public class App extends Application {
         positionLabel.getStyleClass().add("position-label");
         positionLabel.setId("position-label");
 
+        progressLabel = new Label("0 of 0 copied");
+        progressLabel.getStyleClass().add("progress-label");
+        progressLabel.setId("progress-label");
+
         statusLabel = new Label("");
         statusLabel.getStyleClass().add("status-label");
         statusLabel.setId("status-label");
 
-        VBox right = new VBox(2, positionLabel, statusLabel);
+        VBox right = new VBox(2, positionLabel, progressLabel, statusLabel);
         right.setAlignment(Pos.CENTER_RIGHT);
 
         Region spacer = new Region();
@@ -195,10 +208,29 @@ public class App extends Application {
         deleteBtn.getStyleClass().addAll("secondary-btn", "delete-btn");
         deleteBtn.setId("delete-btn");
 
-        HBox secondaryRow = new HBox(startBtn, addBtn, insertBtn, deleteBtn);
+        saveBtn = new Button("\uD83D\uDCBE Save List");
+        saveBtn.getStyleClass().add("secondary-btn");
+        saveBtn.setId("save-btn");
+
+        loadBtn = new Button("\uD83D\uDCC2 Load List");
+        loadBtn.getStyleClass().add("secondary-btn");
+        loadBtn.setId("load-btn");
+
+        HBox secondaryRow = new HBox(startBtn, addBtn, insertBtn, deleteBtn, saveBtn, loadBtn);
         secondaryRow.getStyleClass().add("secondary-controls");
 
-        VBox bar = new VBox(primaryRow, secondaryRow);
+        // ── Auto-advance toggle ──
+        autoAdvanceToggle = new ToggleButton("↻ Auto-advance");
+        autoAdvanceToggle.getStyleClass().add("auto-advance-toggle");
+        autoAdvanceToggle.setId("auto-advance-toggle");
+
+        Region toggleSpacer = new Region();
+        HBox.setHgrow(toggleSpacer, Priority.ALWAYS);
+
+        HBox toggleRow = new HBox(toggleSpacer, autoAdvanceToggle);
+        toggleRow.getStyleClass().add("toggle-row");
+
+        VBox bar = new VBox(primaryRow, secondaryRow, toggleRow);
         bar.getStyleClass().add("control-bar");
         return bar;
     }
